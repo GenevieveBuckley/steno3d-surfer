@@ -19,7 +19,7 @@ class grd(steno3d.parsers.BaseParser):                          # nopep8
 
     extensions = ('grd',)
 
-    def parse(self, project=None, verbose=True):
+    def parse(self, project=None, verbose=True, as_topo=True):
         """function parse
 
         Parses the .grd file (binary or ASCII) provided at parser
@@ -29,6 +29,9 @@ class grd(steno3d.parsers.BaseParser):                          # nopep8
             project: Preexisting Steno3D project to add .grd file components
                      to. If not provided, a new project will be created.
             verbose: Print messages and warnings during file parsing.
+                     (default: True)
+            as_topo: If True, add data from grid file as topography.
+                     Otherwise only add the data as color on a flat surface.
                      (default: True)
 
         Output:
@@ -62,48 +65,104 @@ class grd(steno3d.parsers.BaseParser):                          # nopep8
             )
         (origin, h1, h2, data) = parse_fcn(verbose, warnings)
 
+        surf = steno3d.Surface(
+            project=project,
+            mesh=steno3d.Mesh2DGrid(
+                O=origin,
+                h1=h1,
+                h2=h2
+            ),
+            data=[
+                dict(
+                    location='N',
+                    data=steno3d.DataArray(
+                        array=data,
+                        order='f'
+                    )
+                )
+            ]
+        )
+
+        if as_topo:
+            surf.mesh.Z = data
+
+        if verbose and len(warnings) > 0:
+            print('  If you are interested in contributing to unsupported '
+                  'features, please visit\n'
+                  '      https://github.com/3ptscience/steno3d-surfer')
+
+        return (project,)
+
+
     def _surfer7bin(self, verbose, warnings):
-        #Surfer 7 binary
-        with open(grdfile, 'br') as f:
+        with open(self.file_name, 'br') as f:
+            if unpack('4s', f.read(4))[0] != b'DSRB':
+                raise steno3d.parsers.ParseError(
+                    'Invalid file identifier for Surfer 7 binary .grd '
+                    'file. First 4 characters must be DSRB.'
+                )
+            f.read(8) #Size & Version
 
-        #     for i in range(4):
-            print(unpack('4s', f.read(4))[0] == b'DSRB') #D S R B
-        #     print(hex(unpack('<i', f.read(4))[0]))
-            print(unpack('<i', f.read(4))[0]) #Size
-            print(unpack('<i', f.read(4))[0]) #Version
-
-
-            for i in range(4):
-                print(unpack('c', f.read(1))[0]) #G R I D
-        #     print(hex(unpack('<i', f.read(4))[0]))
-            print(unpack('<i', f.read(4))[0]) #Size
-
+            section = unpack('4s', f.read(4))[0]
+            if section != b'GRID':
+                raise steno3d.parsers.ParseError(
+                    'Unsupported Surfer 7 file structure. GRID keyword '
+                    'must follow immediately after header but {} '
+                    'encountered.'.format(section)
+                )
+            size = unpack('<i', f.read(4))[0]
+            if size != 72:
+                raise steno3d.parsers.ParseError(
+                    'Surfer 7 GRID section is unrecognized size. Expected '
+                    '72 but encountered {}'.format(size)
+                )
             nrow = unpack('<i', f.read(4))[0]
             ncol = unpack('<i', f.read(4))[0]
             x0 = unpack('<d', f.read(8))[0]
             y0 = unpack('<d', f.read(8))[0]
             deltax = unpack('<d', f.read(8))[0]
-
             deltay = unpack('<d', f.read(8))[0]
             zmin = unpack('<d', f.read(8))[0]
             zmax = unpack('<d', f.read(8))[0]
-
             rot = unpack('<d', f.read(8))[0]
+            if rot != 0:
+                self._warn('Unsupported feature: Rotation != 0',
+                           warnings, verbose)
             blankval = unpack('<d', f.read(8))[0]
 
-            #Data
-            for i in range(4):
-                print(unpack('c', f.read(1))[0]) #D A T A
+            section = unpack('4s', f.read(4))[0]
+            if section != b'DATA':
+                raise steno3d.parsers.ParseError(
+                    'Unsupported Surfer 7 file structure. DATA keyword '
+                    'must follow immediately after GRID section but {} '
+                    'encountered.'.format(section)
+                )
             datalen = unpack('<i', f.read(4))[0]
-            assert datalen == ncol*nrow*8
+            if datalen != ncol*nrow*8:
+                raise steno3d.parsers.ParseERror(
+                    'Surfer 7 DATA size does not match expected size from '
+                    'columns and rows. Expected {} but encountered '
+                    '{}'.format(ncol*nrow*8, datalen)
+                )
             data = np.zeros(ncol*nrow)
             for i in range(ncol*nrow):
                 data[i] = unpack('<d', f.read(8))[0]
             data = np.where(data >= blankval, np.nan, data)
 
-            #Fault Info
-        #     for i in range(4):
-        #         print(unpack('c', f.read(1))[0]) #F L T I
+            try:
+                section = unpack('4s', f.read(4))[0]
+                if section == b'FLTI':
+                    self._warn('Unsupported feature: Fault Info',
+                               warnings, verbose)
+                else:
+                    self._warn('Unrecognized keyword: {}'.format(section),
+                               warnings, verbose)
+                self._warn('Remainder of file ignored', warnings, verbose)
+            except:
+                pass
+
+            return ([x0, y0, 0], np.ones(ncol-1)*deltax,
+                    np.ones(nrow-1)*deltay, data)
 
 
     def _surfer6bin(self, verbose, warnings):
@@ -111,7 +170,7 @@ class grd(steno3d.parsers.BaseParser):                          # nopep8
             if unpack('4s', f.read(4))[0] != b'DSBB':
                 raise steno3d.parsers.ParseError(
                     'Invalid file identifier for Surfer 6 binary .grd '
-                    'file. First 4 characters must be DSBB'
+                    'file. First 4 characters must be DSBB.'
                 )
             nx = unpack('<h', f.read(2))[0]
             ny = unpack('<h', f.read(2))[0]
@@ -135,7 +194,22 @@ class grd(steno3d.parsers.BaseParser):                          # nopep8
 
 
     def _surfer6ascii(self, verbose, warnings):
+        with open(self.file_name, 'r') as f:
+            if f.readline() != 'DSAA':
+                raise steno3d.parsers.ParseError(
+                    'Invalid file identifier for Surfer 6 ASCII .grd '
+                    'file. First line must be DSAA'
+                )
+            [ncol, nrow] = [int(n) for n in f.readline().split()]
+            [xmin, xmax] = [float(n) for n in f.readline().split()]
+            [ymin, ymax] = [float(n) for n in f.readline().split()]
+            [zmin, zmax] = [float(n) for n in f.readline().split()]
+            data = np.zeros((ncol, nrow))
+            for i in range(nrow):
+                data[:, i] = [float(n) for n in f.readline().split()]
 
+        return ([xmin, ymin], np.diff(np.linspace(xmin, xmax, ncol)),
+                np.diff(np.linspace(ymin, ymax, nrow)), data.flatten())
 
 
     @staticmethod
