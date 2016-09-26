@@ -27,7 +27,7 @@ setup(
     version = '0.0.1',
     packages = find_packages(),
     install_requires = ['numpy>=1.7',
-                        'steno3d>=0.2.6'],
+                        'steno3d>=0.2.9'],
     author = '3point Science',
     author_email = 'info@3ptscience.com',
     description = 'steno3d_surfer',
