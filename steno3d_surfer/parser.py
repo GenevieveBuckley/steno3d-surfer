@@ -95,7 +95,7 @@ class grd(steno3d.parsers.BaseParser):                          # nopep8
 
 
     def _surfer7bin(self, verbose, warnings):
-        with open(self.file_name, 'br') as f:
+        with open(self.file_name, 'rb') as f:
             if unpack('4s', f.read(4))[0] != b'DSRB':
                 raise steno3d.parsers.ParseError(
                     'Invalid file identifier for Surfer 7 binary .grd '
@@ -166,7 +166,7 @@ class grd(steno3d.parsers.BaseParser):                          # nopep8
 
 
     def _surfer6bin(self, verbose, warnings):
-        with open(self.file_name, 'br') as f:
+        with open(self.file_name, 'rb') as f:
             if unpack('4s', f.read(4))[0] != b'DSBB':
                 raise steno3d.parsers.ParseError(
                     'Invalid file identifier for Surfer 6 binary .grd '
@@ -195,7 +195,7 @@ class grd(steno3d.parsers.BaseParser):                          # nopep8
 
     def _surfer6ascii(self, verbose, warnings):
         with open(self.file_name, 'r') as f:
-            if f.readline() != 'DSAA':
+            if f.readline().strip() != 'DSAA':
                 raise steno3d.parsers.ParseError(
                     'Invalid file identifier for Surfer 6 ASCII .grd '
                     'file. First line must be DSAA'
@@ -208,7 +208,7 @@ class grd(steno3d.parsers.BaseParser):                          # nopep8
             for i in range(nrow):
                 data[:, i] = [float(n) for n in f.readline().split()]
 
-        return ([xmin, ymin], np.diff(np.linspace(xmin, xmax, ncol)),
+        return ([xmin, ymin, 0], np.diff(np.linspace(xmin, xmax, ncol)),
                 np.diff(np.linspace(ymin, ymax, nrow)), data.flatten())
 
 
