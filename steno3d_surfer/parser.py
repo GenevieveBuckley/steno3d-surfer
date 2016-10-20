@@ -76,8 +76,7 @@ class grd(steno3d.parsers.BaseParser):                          # nopep8
                 dict(
                     location='N',
                     data=steno3d.DataArray(
-                        array=data,
-                        order='f'
+                        array=data
                     )
                 )
             ]
@@ -162,7 +161,8 @@ class grd(steno3d.parsers.BaseParser):                          # nopep8
                 pass
 
             return ([x0, y0, 0], np.ones(ncol-1)*deltax,
-                    np.ones(nrow-1)*deltay, data)
+                    np.ones(nrow-1)*deltay,
+                    data.reshape(ncol, nrow, order='F').flatten())
 
 
     def _surfer6bin(self, verbose, warnings):
@@ -190,7 +190,8 @@ class grd(steno3d.parsers.BaseParser):                          # nopep8
                 else:
                     data[i] = zdata
 
-        return ([xlo, ylo, 0], np.diff(xvals), np.diff(yvals), data)
+        return ([xlo, ylo, 0], np.diff(xvals), np.diff(yvals),
+                data.reshape(nx, ny, order='F').flatten())
 
 
     def _surfer6ascii(self, verbose, warnings):
@@ -204,9 +205,9 @@ class grd(steno3d.parsers.BaseParser):                          # nopep8
             [xmin, xmax] = [float(n) for n in f.readline().split()]
             [ymin, ymax] = [float(n) for n in f.readline().split()]
             [zmin, zmax] = [float(n) for n in f.readline().split()]
-            data = np.zeros((ncol, nrow))
+            data = np.zeros((nrow, ncol))
             for i in range(nrow):
-                data[:, i] = [float(n) for n in f.readline().split()]
+                data[i, :] = [float(n) for n in f.readline().split()]
 
         return ([xmin, ymin, 0], np.diff(np.linspace(xmin, xmax, ncol)),
                 np.diff(np.linspace(ymin, ymax, nrow)), data.flatten())
