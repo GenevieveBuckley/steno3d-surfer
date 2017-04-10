@@ -253,6 +253,7 @@ class grd(steno3d.parsers.BaseParser):                          # nopep8
             data = np.zeros((nrow, ncol))
             for i in range(nrow):
                 data[i, :] = [float(n) for n in f.readline().split()]
+            data = data.T
 
         return ([xmin, ymin, 0], np.diff(np.linspace(xmin, xmax, ncol)),
                 np.diff(np.linspace(ymin, ymax, nrow)), data.flatten())
