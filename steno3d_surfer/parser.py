@@ -49,21 +49,7 @@ class grd(steno3d.parsers.BaseParser):                          # nopep8
             raise steno3d.parsers.ParseError('Only allowed input for parse is '
                                              'optional Steno3D project')
 
-        f = open(self.file_name, 'rb')
-        file_ident = unpack('4s', f.read(4))[0]
-        f.close()
-        if file_ident == b'DSRB':
-            parse_fcn = self._surfer7bin
-        elif file_ident == b'DSBB':
-            parse_fcn = self._surfer6bin
-        elif file_ident == b'DSAA':
-            parse_fcn = self._surfer6ascii
-        else:
-            raise steno3d.parsers.ParseError(
-                'Invalid file identifier for Surfer .grd file. First 4 '
-                'characters must be DSRB, DSBB, or DSAA'
-            )
-        (origin, h1, h2, data) = parse_fcn(verbose, warnings)
+        (origin, h1, h2, data) = self._select_parse_fcn()(verbose, warnings)
 
         surf = steno3d.Surface(
             project=project,
@@ -92,6 +78,65 @@ class grd(steno3d.parsers.BaseParser):                          # nopep8
 
         return (project,)
 
+    def extract(self, verbose=True):
+        """function extract
+
+        Extracts data from the .grd file (binary or ASCII) provided at parser
+        instantiation into a Python dictionary.
+
+        Optional input:
+            verbose: Print messages and warnings during file parsing.
+                     (default: True)
+
+        Output:
+            dictionary of grd file data including:
+                ncol/nrow - number of columns/rows
+                xll/yll - lower-left x/y-value
+                xsize/ysize - spacing on x/y-axis
+                zmin/zmax - data range
+                data - numpy array of shape ncol x nrow
+        """
+
+        warnings = set()
+
+        (origin, h1, h2, data) = self._select_parse_fcn()(verbose, warnings)
+
+        grd_info = dict(
+            ncol=len(h1)+1,
+            nrow=len(h2)+1,
+            xll=origin[0],
+            yll=origin[1],
+            xsize=h1[0],
+            ysize=h2[0],
+            zmin=np.nanmin(data),
+            zmax=np.nanmax(data),
+            data=data.reshape(len(h1)+1, len(h2)+1)
+        )
+
+        if verbose and len(warnings) > 0:
+            print('  If you are interested in contributing to unsupported '
+                  'features, please visit\n'
+                  '      https://github.com/3ptscience/steno3d-surfer')
+
+        return grd_info
+
+    def _select_parse_fcn(self):
+        f = open(self.file_name, 'rb')
+        file_ident = unpack('4s', f.read(4))[0]
+        f.close()
+        if file_ident == b'DSRB':
+            parse_fcn = self._surfer7bin
+        elif file_ident == b'DSBB':
+            parse_fcn = self._surfer6bin
+        elif file_ident == b'DSAA':
+            parse_fcn = self._surfer6ascii
+        else:
+            raise steno3d.parsers.ParseError(
+                'Invalid file identifier for Surfer .grd file. First 4 '
+                'characters must be DSRB, DSBB, or DSAA'
+            )
+        return parse_fcn
+
 
     def _surfer7bin(self, verbose, warnings):
         with open(self.file_name, 'rb') as f:
@@ -100,7 +145,7 @@ class grd(steno3d.parsers.BaseParser):                          # nopep8
                     'Invalid file identifier for Surfer 7 binary .grd '
                     'file. First 4 characters must be DSRB.'
                 )
-            f.read(8) #Size & Version
+            f.read(8)  #Size & Version
 
             section = unpack('4s', f.read(4))[0]
             if section != b'GRID':
@@ -138,7 +183,7 @@ class grd(steno3d.parsers.BaseParser):                          # nopep8
                 )
             datalen = unpack('<i', f.read(4))[0]
             if datalen != ncol*nrow*8:
-                raise steno3d.parsers.ParseERror(
+                raise steno3d.parsers.ParseError(
                     'Surfer 7 DATA size does not match expected size from '
                     'columns and rows. Expected {} but encountered '
                     '{}'.format(ncol*nrow*8, datalen)
@@ -211,7 +256,6 @@ class grd(steno3d.parsers.BaseParser):                          # nopep8
 
         return ([xmin, ymin, 0], np.diff(np.linspace(xmin, xmax, ncol)),
                 np.diff(np.linspace(ymin, ymax, nrow)), data.flatten())
-
 
     @staticmethod
     def _warn(warning, warnings, verbose):
