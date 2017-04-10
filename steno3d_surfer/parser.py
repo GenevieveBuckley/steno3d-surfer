@@ -205,9 +205,9 @@ class grd(steno3d.parsers.BaseParser):                          # nopep8
             except:
                 pass
 
-            return ([x0, y0, 0], np.ones(ncol-1)*deltax,
-                    np.ones(nrow-1)*deltay,
-                    data.reshape(ncol, nrow, order='F').flatten())
+        return ([x0, y0, 0], np.ones(ncol-1)*deltax,
+                np.ones(nrow-1)*deltay,
+                data.reshape(ncol, nrow, order='F').flatten())
 
 
     def _surfer6bin(self, verbose, warnings):
