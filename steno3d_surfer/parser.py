@@ -6,8 +6,66 @@ from __future__ import unicode_literals
 from struct import unpack
 
 import numpy as np
+import properties
 
 import steno3d
+
+
+class GridInfo(properties.HasProperties):
+    ncol = properties.Integer('number of columns', min=2)
+    nrow = properties.Integer('number of rows', min=2)
+    xll = properties.Float('x-value of lower-left corner')
+    yll = properties.Float('y-value of lower-left corner')
+    xsize = properties.Float('x-axis spacing')
+    ysize = properties.Float('y-axis spacing')
+    zmin = properties.Float('minimum data value', required=False)
+    zmax = properties.Float('maximum data value', required=False)
+    data = properties.Array('grid of data values', shape=('*', '*'))
+
+    def to_steno3d(self, project=None, as_topo=True):
+        """Create a project from GridInfo
+
+        Optional input:
+            project: Preexisting Steno3D project to add .grd file components
+                     to. If not provided, a new project will be created.
+            verbose: Print messages and warnings during file parsing.
+                     (default: True)
+            as_topo: If True, add data from grid file as topography.
+                     Otherwise only add the data as color on a flat surface.
+                     (default: True)
+
+        Output:
+            Steno3D Project with GridInfo components
+        """
+
+        self.validate()
+
+        if project is None:
+            project = steno3d.Project(description='From surfer grid file')
+        elif not isinstance(project, steno3d.Project):
+            raise steno3d.parsers.ParseError('project must be Steno3D Project')
+
+        surf = steno3d.Surface(
+            project=project,
+            mesh=steno3d.Mesh2DGrid(
+                O=[self.xll, self.yll, 0],
+                h1=np.ones(self.ncol-1)*self.xsize,
+                h2=np.ones(self.nrow-1)*self.ysize
+            ),
+            data=[
+                dict(
+                    location='N',
+                    data=steno3d.DataArray(
+                        array=self.data.flatten()
+                    )
+                )
+            ]
+        )
+
+        if as_topo:
+            surf.mesh.Z = self.data.flatten()
+
+        return project
 
 
 class grd(steno3d.parsers.BaseParser):                          # nopep8
@@ -39,44 +97,14 @@ class grd(steno3d.parsers.BaseParser):                          # nopep8
             from the .grd file
         """
 
-        warnings = set()
+        grd_info = self.extract(verbose=verbose)
 
-        if project is None:
-            project = steno3d.Project(
-                description='Project imported from ' + self.file_name
-            )
-        elif not isinstance(project, steno3d.Project):
-            raise steno3d.parsers.ParseError('Only allowed input for parse is '
-                                             'optional Steno3D project')
-
-        (origin, h1, h2, data) = self._select_parse_fcn()(verbose, warnings)
-
-        surf = steno3d.Surface(
+        proj = grd_info.to_steno3d(
             project=project,
-            mesh=steno3d.Mesh2DGrid(
-                O=origin,
-                h1=h1,
-                h2=h2
-            ),
-            data=[
-                dict(
-                    location='N',
-                    data=steno3d.DataArray(
-                        array=data
-                    )
-                )
-            ]
+            as_topo=as_topo,
         )
 
-        if as_topo:
-            surf.mesh.Z = data
-
-        if verbose and len(warnings) > 0:
-            print('  If you are interested in contributing to unsupported '
-                  'features, please visit\n'
-                  '      https://github.com/3ptscience/steno3d-surfer')
-
-        return (project,)
+        return (proj,)
 
     def extract(self, verbose=True):
         """function extract
@@ -89,29 +117,12 @@ class grd(steno3d.parsers.BaseParser):                          # nopep8
                      (default: True)
 
         Output:
-            dictionary of grd file data including:
-                ncol/nrow - number of columns/rows
-                xll/yll - lower-left x/y-value
-                xsize/ysize - spacing on x/y-axis
-                zmin/zmax - data range
-                data - numpy array of shape ncol x nrow
+            GridInfo instance
         """
 
         warnings = set()
 
-        (origin, h1, h2, data) = self._select_parse_fcn()(verbose, warnings)
-
-        grd_info = dict(
-            ncol=len(h1)+1,
-            nrow=len(h2)+1,
-            xll=origin[0],
-            yll=origin[1],
-            xsize=h1[0],
-            ysize=h2[0],
-            zmin=np.nanmin(data),
-            zmax=np.nanmax(data),
-            data=data.reshape(len(h1)+1, len(h2)+1)
-        )
+        grd_info = self._select_parse_fcn()(verbose, warnings)
 
         if verbose and len(warnings) > 0:
             print('  If you are interested in contributing to unsupported '
@@ -136,7 +147,6 @@ class grd(steno3d.parsers.BaseParser):                          # nopep8
                 'characters must be DSRB, DSBB, or DSAA'
             )
         return parse_fcn
-
 
     def _surfer7bin(self, verbose, warnings):
         with open(self.file_name, 'rb') as f:
@@ -205,10 +215,19 @@ class grd(steno3d.parsers.BaseParser):                          # nopep8
             except:
                 pass
 
-        return ([x0, y0, 0], np.ones(ncol-1)*deltax,
-                np.ones(nrow-1)*deltay,
-                data.reshape(ncol, nrow, order='F').flatten())
+        grd_info = GridInfo(
+            ncol=ncol,
+            nrow=nrow,
+            xll=x0,
+            yll=y0,
+            xsize=deltax,
+            ysize=deltay,
+            zmin=zmin,
+            zmax=zmax,
+            data=data.reshape(ncol, nrow, order='F')
+        )
 
+        return grd_info
 
     def _surfer6bin(self, verbose, warnings):
         with open(self.file_name, 'rb') as f:
@@ -225,8 +244,6 @@ class grd(steno3d.parsers.BaseParser):                          # nopep8
             yhi = unpack('<d', f.read(8))[0]
             zlo = unpack('<d', f.read(8))[0]
             zhi = unpack('<d', f.read(8))[0]
-            xvals = np.linspace(xlo, xhi, nx)
-            yvals = np.linspace(ylo, yhi, ny)
             data = np.ones(nx * ny)
             for i in range(nx * ny):
                 zdata = unpack('<f', f.read(4))[0]
@@ -235,9 +252,19 @@ class grd(steno3d.parsers.BaseParser):                          # nopep8
                 else:
                     data[i] = zdata
 
-        return ([xlo, ylo, 0], np.diff(xvals), np.diff(yvals),
-                data.reshape(nx, ny, order='F').flatten())
+        grd_info = GridInfo(
+            ncol=nx,
+            nrow=ny,
+            xll=xlo,
+            yll=ylo,
+            xsize=(xhi-xlo)/(nx-1),
+            ysize=(yhi-ylo)/(ny-1),
+            zmin=zlo,
+            zmax=zhi,
+            data=data.reshape(nx, ny, order='F')
+        )
 
+        return grd_info
 
     def _surfer6ascii(self, verbose, warnings):
         with open(self.file_name, 'r') as f:
@@ -255,8 +282,19 @@ class grd(steno3d.parsers.BaseParser):                          # nopep8
                 data[i, :] = [float(n) for n in f.readline().split()]
             data = data.T
 
-        return ([xmin, ymin, 0], np.diff(np.linspace(xmin, xmax, ncol)),
-                np.diff(np.linspace(ymin, ymax, nrow)), data.flatten())
+        grd_info = GridInfo(
+            ncol=ncol,
+            nrow=nrow,
+            xll=xmin,
+            yll=ymin,
+            xsize=(xmax-xmin)/(ncol-1),
+            ysize=(ymax-ymin)/(nrow-1),
+            zmin=zmin,
+            zmax=zmax,
+            data=data
+        )
+
+        return grd_info
 
     @staticmethod
     def _warn(warning, warnings, verbose):
