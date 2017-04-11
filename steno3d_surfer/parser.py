@@ -22,6 +22,11 @@ class GridInfo(properties.HasProperties):
     zmax = properties.Float('maximum data value', required=False)
     data = properties.Array('grid of data values', shape=('*', '*'))
 
+    @properties.validator
+    def _validate_datasize(self):
+        if self.data.shape != (self.ncol, self.nrow):
+            raise ValueError('Data shape must be ncol x nrow')
+
     def to_steno3d(self, project=None, as_topo=True):
         """Create a project from GridInfo
 
