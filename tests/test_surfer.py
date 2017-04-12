@@ -6,6 +6,7 @@ from __future__ import unicode_literals
 from os import path
 import unittest
 
+import numpy as np
 from steno3d.parsers import ParseError
 import steno3d
 import steno3d_surfer
@@ -55,6 +56,27 @@ class TestSurfer(unittest.TestCase):
     def test_bin7(self):
         # Not implemented!
         pass
+
+    def test_extract(self):
+        ascii_file = path.sep.join(self.assets + ['ascii.grd'])
+        parser = steno3d.parsers.grd(ascii_file)
+        grd_dict = parser.extract()
+        assert grd_dict.ncol == 5
+        assert grd_dict.nrow == 7
+        assert grd_dict.xll == 0
+        assert grd_dict.yll == 200
+        assert grd_dict.xsize == 25
+        assert abs(grd_dict.ysize - 100./6) < .01
+        assert grd_dict.zmin == 1.5
+        assert grd_dict.zmax == 2.5
+        assert np.array_equiv(grd_dict.data,
+                              np.array([[1.5, 1.6, 1.7, 1.8, 1.9],
+                                        [1.6, 1.7, 1.8, 1.9, 2.0],
+                                        [1.7, 1.8, 1.9, 2.0, 2.1],
+                                        [1.8, 1.9, 2.0, 2.1, 2.2],
+                                        [1.9, 2.0, 2.1, 2.2, 2.3],
+                                        [2.0, 2.1, 2.2, 2.3, 2.4],
+                                        [2.1, 2.2, 2.3, 2.4, 2.5]]).T)
 
 
 if __name__ == '__main__':
