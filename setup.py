@@ -24,7 +24,7 @@ with open('README.rst') as f:
 
 setup(
     name = 'steno3d_surfer',
-    version = '0.0.3',
+    version = '0.0.4',
     packages = find_packages(exclude=('tests',)),
     install_requires = ['numpy>=1.7',
                         'steno3d>=0.2.9'],
