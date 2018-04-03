@@ -6,6 +6,6 @@ from __future__ import unicode_literals
 from .parser import grd
 
 __version__ = '0.0.3'
-__author__ = '3point Science'
+__author__ = 'Seequent'
 __license__ = 'MIT'
-__copyright__ = 'Copyright 2016 3point Science'
+__copyright__ = 'Copyright 2018 Seequent'
